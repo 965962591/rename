@@ -143,20 +143,33 @@ class FileOrganizer(QWidget):
             subfolder_path = os.path.join(folder, subfolder)
             if os.path.isdir(subfolder_path):
                 folder_item = QTreeWidgetItem(self.left_list, [subfolder])
+                has_files = False  # 用于检查文件夹内是否有文件
                 for file in os.listdir(subfolder_path):
                     file_path = os.path.join(subfolder_path, file)
                     if os.path.isfile(file_path):
                         QTreeWidgetItem(folder_item, [file])
+                        has_files = True
+                if has_files:
+                    folder_count += 1
+            else:
+                # 如果是文件而不是文件夹，直接添加到左侧列表
+                QTreeWidgetItem(self.left_list, [subfolder])
                 folder_count += 1
+
         self.folder_count_label.setText(f'文件夹数量: {folder_count}')
         self.update_file_count()
 
     def add_to_right(self):
         selected_items = self.left_list.selectedItems()
         for item in selected_items:
-            folder_item = QTreeWidgetItem(self.right_list, [item.text(0)])
-            for i in range(item.childCount()):
-                QTreeWidgetItem(folder_item, [item.child(i).text(0)])
+            # 检查是否为文件夹
+            if item.childCount() > 0:
+                folder_item = QTreeWidgetItem(self.right_list, [item.text(0)])
+                for i in range(item.childCount()):
+                    QTreeWidgetItem(folder_item, [item.child(i).text(0)])
+            else:
+                # 如果是文件，直接添加到右侧列表
+                QTreeWidgetItem(self.right_list, [item.text(0)])
         self.update_file_count()
 
     def add_all_to_right(self):
@@ -183,7 +196,11 @@ class FileOrganizer(QWidget):
         file_count = 0
         for i in range(self.right_list.topLevelItemCount()):
             item = self.right_list.topLevelItem(i)
-            file_count += item.childCount()
+            if item.childCount() > 0:
+                file_count += item.childCount()
+            else:
+                # 如果是单个文件，直接计数
+                file_count += 1
         self.file_count_label.setText(f'文件总数: {file_count}')
 
     def toggle_replace(self, state):
@@ -195,57 +212,69 @@ class FileOrganizer(QWidget):
         hash_count = prefix.count('#')
 
         for i in range(self.right_list.topLevelItemCount()):
-            folder_item = self.right_list.topLevelItem(i)
-            folder_name = folder_item.text(0)
-            folder_path = os.path.join(self.folder_input.text(), folder_name)
-            parent_folder_name = os.path.basename(os.path.dirname(folder_path))
-            print(f"Parent Folder Name: {parent_folder_name}")
+            item = self.right_list.topLevelItem(i)
+            if item.childCount() > 0:
+                # 处理文件夹
+                folder_name = item.text(0)
+                folder_path = os.path.join(self.folder_input.text(), folder_name)
+                parent_folder_name = os.path.basename(os.path.dirname(folder_path))
 
-            for j in range(folder_item.childCount()):
-                file_item = folder_item.child(j)
-                original_name = file_item.text(0)
-                original_path = os.path.join(folder_path, original_name)
-
-                # 如果prefix为空，则保持原文件名
-                if not prefix:
-                    new_name = original_name
-                else:
-                    if hash_count > 0:
-                        number_format = f'{{:0{hash_count}d}}'
-                        new_name = prefix.replace('#' * hash_count, number_format.format(j))
-                    else:
-                        new_name = prefix
-
-                    # 确保$$P替换逻辑在此处执行
-                    new_name = new_name.replace('$$p', f'{parent_folder_name}_{folder_name}')
-                    new_name = new_name.replace('$p', folder_name)
-                    
-                    file_extension = os.path.splitext(original_name)[1]
-
-                    if '*' in prefix:
-                        new_name += original_name
-                    else:
-                        new_name += file_extension
-
-                    new_name = new_name.replace('*', '')
-
-                    if replace_text:
-                        new_name = original_name.replace(prefix, replace_text)
-
+                for j in range(item.childCount()):
+                    file_item = item.child(j)
+                    original_name = file_item.text(0)
+                    original_path = os.path.join(folder_path, original_name)
+                    new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, folder_name, j, hash_count)
+                    new_path = os.path.join(folder_path, new_name)
+                    self.perform_rename(original_path, new_path)
+            else:
+                # 处理单个文件
+                original_name = item.text(0)
+                folder_path = self.folder_input.text()
+                parent_folder_name = os.path.basename(os.path.dirname(folder_path))
+                new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, os.path.basename(folder_path), i, hash_count)
                 new_path = os.path.join(folder_path, new_name)
-
-                print(f'Trying to rename: {original_path} to {new_path}')
-                if not os.path.exists(original_path):
-                    print(f'File does not exist: {original_path}')
-                    continue
-
-                try:
-                    os.rename(original_path, new_path)
-                    print(f'Renamed {original_name} to {new_name}')
-                except Exception as e:
-                    print(f'Error renaming {original_name}: {e}')
+                self.perform_rename(original_path, new_path)
 
         self.refresh_file_lists()
+
+    def generate_new_name(self, original_name, prefix, replace_text, parent_folder_name, folder_name, index, hash_count):
+        if not prefix:
+            new_name = original_name
+        else:
+            if hash_count > 0:
+                number_format = f'{{:0{hash_count}d}}'
+                new_name = prefix.replace('#' * hash_count, number_format.format(index))
+            else:
+                new_name = prefix
+
+            new_name = new_name.replace('$$p', f'{parent_folder_name}_{folder_name}')
+            new_name = new_name.replace('$p', folder_name)
+            
+            file_extension = os.path.splitext(original_name)[1]
+
+            if '*' in prefix:
+                new_name += original_name
+            else:
+                new_name += file_extension
+
+            new_name = new_name.replace('*', '')
+
+            if replace_text:
+                new_name = original_name.replace(prefix, replace_text)
+
+        return new_name
+
+    def perform_rename(self, original_path, new_path):
+        print(f'Trying to rename: {original_path} to {new_path}')
+        if not os.path.exists(original_path):
+            print(f'File does not exist: {original_path}')
+            return
+
+        try:
+            os.rename(original_path, new_path)
+            print(f'Renamed {os.path.basename(original_path)} to {os.path.basename(new_path)}')
+        except Exception as e:
+            print(f'Error renaming {os.path.basename(original_path)}: {e}')
 
     def refresh_file_lists(self):
         # 重新填充左侧列表
@@ -260,41 +289,23 @@ class FileOrganizer(QWidget):
         hash_count = prefix.count('#')
 
         for i in range(self.right_list.topLevelItemCount()):
-            folder_item = self.right_list.topLevelItem(i)
-            folder_name = folder_item.text(0)
-            folder_path = os.path.join(self.folder_input.text(), folder_name)
-            parent_folder_name = os.path.basename(os.path.dirname(folder_path))
+            item = self.right_list.topLevelItem(i)
+            if item.childCount() > 0:
+                folder_name = item.text(0)
+                folder_path = os.path.join(self.folder_input.text(), folder_name)
+                parent_folder_name = os.path.basename(os.path.dirname(folder_path))
 
-            for j in range(folder_item.childCount()):
-                file_item = folder_item.child(j)
-                original_name = file_item.text(0)
-
-                # 如果prefix为空，则保持原文件名
-                if not prefix:
-                    new_name = original_name
-                else:
-                    if hash_count > 0:
-                        number_format = f'{{:0{hash_count}d}}'
-                        new_name = prefix.replace('#' * hash_count, number_format.format(j))
-                    else:
-                        new_name = prefix
-
-                    # 确保$$P替换逻辑在此处执行
-                    new_name = new_name.replace('$$p', f'{parent_folder_name}_{folder_name}')
-                    new_name = new_name.replace('$p', folder_name)
-                    
-                    file_extension = os.path.splitext(original_name)[1]
-
-                    if '*' in prefix:
-                        new_name += original_name
-                    else:
-                        new_name += file_extension
-
-                    new_name = new_name.replace('*', '')
-
-                    if replace_text:
-                        new_name = original_name.replace(prefix, replace_text)
-
+                for j in range(item.childCount()):
+                    file_item = item.child(j)
+                    original_name = file_item.text(0)
+                    new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, folder_name, j, hash_count)
+                    rename_data.append((folder_path, original_name, new_name))
+            else:
+                # 处理单个文件
+                original_name = item.text(0)
+                folder_path = self.folder_input.text()
+                parent_folder_name = os.path.basename(os.path.dirname(folder_path))
+                new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, os.path.basename(folder_path), i, hash_count)
                 rename_data.append((folder_path, original_name, new_name))
 
         if rename_data:
