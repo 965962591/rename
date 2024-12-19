@@ -1,13 +1,13 @@
 import sys
 import os
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTreeWidget, QTreeWidgetItem, QFileDialog, QLabel, QDialog, QTableWidget, QTableWidgetItem, QHeaderView
-from PyQt5.QtCore import QSettings
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QTreeWidget, QTreeWidgetItem, QFileDialog, QLabel, QDialog, QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox
+from PyQt5.QtCore import QSettings, Qt
 
 class PreviewDialog(QDialog):
     def __init__(self, rename_data):
         super().__init__()
         self.setWindowTitle('重命名预览')
-        self.resize(800, 600)
+        self.resize(1200, 800)
 
         layout = QVBoxLayout()
         self.table = QTableWidget(self)
@@ -36,7 +36,7 @@ class FileOrganizer(QWidget):
 
     def initUI(self):
         # 设置窗口初始大小
-        self.resize(800, 600)
+        self.resize(1200, 800)
 
         # 主布局
         main_layout = QVBoxLayout()
@@ -52,7 +52,9 @@ class FileOrganizer(QWidget):
         # 文件夹和文件计数显示
         count_layout = QHBoxLayout()
         self.folder_count_label = QLabel('文件夹数量: 0', self)
+        self.file_count_label = QLabel('文件总数: 0', self)
         count_layout.addWidget(self.folder_count_label)
+        count_layout.addStretch()
 
         # 文件列表布局
         list_layout = QHBoxLayout()
@@ -61,20 +63,27 @@ class FileOrganizer(QWidget):
 
         # 右侧布局
         right_layout = QVBoxLayout()
-        self.file_count_label = QLabel('文件总数: 0', self)
+        right_layout.addWidget(self.file_count_label)  # 将文件总数标签放在右侧布局的顶部
         self.right_list = QTreeWidget(self)
         self.right_list.setHeaderHidden(True)
-        right_layout.addWidget(self.file_count_label)
         right_layout.addWidget(self.right_list)
 
         # 右侧下方布局
         bottom_layout = QHBoxLayout()
+        self.replace_checkbox = QCheckBox('查找替换', self)
+        self.replace_checkbox.stateChanged.connect(self.toggle_replace)
         self.line_edit = QLineEdit(self)
+        self.replace_line_edit = QLineEdit(self)
+        self.replace_line_edit.setPlaceholderText('请输入替换内容')
+        self.replace_line_edit.setVisible(False)  # 默认隐藏
+
         self.start_button = QPushButton('开始', self)
         self.start_button.clicked.connect(self.rename_files)
         self.preview_button = QPushButton('预览', self)
         self.preview_button.clicked.connect(self.preview_rename)
+        bottom_layout.addWidget(self.replace_checkbox)
         bottom_layout.addWidget(self.line_edit)
+        bottom_layout.addWidget(self.replace_line_edit)
         bottom_layout.addWidget(self.start_button)
         bottom_layout.addWidget(self.preview_button)
         right_layout.addLayout(bottom_layout)
@@ -177,11 +186,13 @@ class FileOrganizer(QWidget):
             file_count += item.childCount()
         self.file_count_label.setText(f'文件总数: {file_count}')
 
+    def toggle_replace(self, state):
+        self.replace_line_edit.setVisible(state == Qt.Checked)
+
     def rename_files(self):
         prefix = self.line_edit.text()
+        replace_text = self.replace_line_edit.text() if self.replace_checkbox.isChecked() else None
         hash_count = prefix.count('#')
-        if hash_count == 0:
-            return
 
         for i in range(self.right_list.topLevelItemCount()):
             folder_item = self.right_list.topLevelItem(i)
@@ -193,24 +204,31 @@ class FileOrganizer(QWidget):
                 original_name = file_item.text(0)
                 original_path = os.path.join(folder_path, original_name)
 
-                number_format = f'{{:0{hash_count}d}}'
-                new_name = prefix.replace('#' * hash_count, number_format.format(j))
-                
-                new_name = new_name.replace('$p', folder_name)
-                
-                # 获取文件扩展名
-                file_extension = os.path.splitext(original_name)[1]
-                
-                # 检查是否包含 '*'
-                if '*' in prefix:
-                    new_name += original_name
+                # 如果prefix为空，则保持原文件名
+                if not prefix:
+                    new_name = original_name
                 else:
-                    new_name += file_extension  # 保留扩展名
-                
-                new_name = new_name.replace('*', '')  # 去掉 '*'
+                    if hash_count > 0:
+                        number_format = f'{{:0{hash_count}d}}'
+                        new_name = prefix.replace('#' * hash_count, number_format.format(j))
+                    else:
+                        new_name = prefix
+
+                    new_name = new_name.replace('$p', folder_name)
+                    file_extension = os.path.splitext(original_name)[1]
+
+                    if '*' in prefix:
+                        new_name += original_name
+                    else:
+                        new_name += file_extension
+
+                    new_name = new_name.replace('*', '')
+
+                    if replace_text:
+                        new_name = original_name.replace(prefix, replace_text)
+
                 new_path = os.path.join(folder_path, new_name)
 
-                # 调试信息
                 print(f'Trying to rename: {original_path} to {new_path}')
                 if not os.path.exists(original_path):
                     print(f'File does not exist: {original_path}')
@@ -222,7 +240,6 @@ class FileOrganizer(QWidget):
                 except Exception as e:
                     print(f'Error renaming {original_name}: {e}')
 
-        # 刷新文件列表
         self.refresh_file_lists()
 
     def refresh_file_lists(self):
@@ -234,9 +251,8 @@ class FileOrganizer(QWidget):
     def preview_rename(self):
         rename_data = []
         prefix = self.line_edit.text()
+        replace_text = self.replace_line_edit.text() if self.replace_checkbox.isChecked() else None
         hash_count = prefix.count('#')
-        if hash_count == 0:
-            return
 
         for i in range(self.right_list.topLevelItemCount()):
             folder_item = self.right_list.topLevelItem(i)
@@ -247,26 +263,36 @@ class FileOrganizer(QWidget):
                 file_item = folder_item.child(j)
                 original_name = file_item.text(0)
 
-                number_format = f'{{:0{hash_count}d}}'
-                new_name = prefix.replace('#' * hash_count, number_format.format(j))
-                
-                new_name = new_name.replace('$p', folder_name)
-                
-                # 获取文件扩展名
-                file_extension = os.path.splitext(original_name)[1]
-                
-                # 检查是否包含 '*'
-                if '*' in prefix:
-                    new_name += original_name
+                # 如果prefix为空，则保持原文件名
+                if not prefix:
+                    new_name = original_name
                 else:
-                    new_name += file_extension  # 保留扩展名
-                
-                new_name = new_name.replace('*', '')
+                    if hash_count > 0:
+                        number_format = f'{{:0{hash_count}d}}'
+                        new_name = prefix.replace('#' * hash_count, number_format.format(j))
+                    else:
+                        new_name = prefix
+
+                    new_name = new_name.replace('$p', folder_name)
+                    file_extension = os.path.splitext(original_name)[1]
+
+                    if '*' in prefix:
+                        new_name += original_name
+                    else:
+                        new_name += file_extension
+
+                    new_name = new_name.replace('*', '')
+
+                    if replace_text:
+                        new_name = original_name.replace(prefix, replace_text)
 
                 rename_data.append((folder_path, original_name, new_name))
 
-        dialog = PreviewDialog(rename_data)
-        dialog.exec_()
+        if rename_data:
+            dialog = PreviewDialog(rename_data)
+            dialog.exec_()
+        else:
+            print("没有可预览的重命名数据")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
