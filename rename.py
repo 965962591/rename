@@ -86,6 +86,22 @@ class FileOrganizer(QWidget):
         bottom_layout.addWidget(self.replace_line_edit)
         bottom_layout.addWidget(self.start_button)
         bottom_layout.addWidget(self.preview_button)
+
+        # 添加文件类型复选框
+        self.jpg_checkbox = QCheckBox('jpg', self)
+        self.txt_checkbox = QCheckBox('txt', self)
+        self.xml_checkbox = QCheckBox('xml', self)
+
+        # 默认选中所有复选框
+        self.jpg_checkbox.setChecked(True)
+        self.txt_checkbox.setChecked(True)
+        self.xml_checkbox.setChecked(True)
+
+        # 将复选框添加到布局
+        bottom_layout.addWidget(self.jpg_checkbox)
+        bottom_layout.addWidget(self.txt_checkbox)
+        bottom_layout.addWidget(self.xml_checkbox)
+
         right_layout.addLayout(bottom_layout)
 
         # 按钮布局
@@ -223,17 +239,20 @@ class FileOrganizer(QWidget):
                     file_item = item.child(j)
                     original_name = file_item.text(0)
                     original_path = os.path.join(folder_path, original_name)
-                    new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, folder_name, j, hash_count)
-                    new_path = os.path.join(folder_path, new_name)
-                    self.perform_rename(original_path, new_path)
+                    if self.should_rename_file(original_name):
+                        new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, folder_name, j, hash_count)
+                        new_path = os.path.join(folder_path, new_name)
+                        self.perform_rename(original_path, new_path)
             else:
                 # 处理单个文件
                 original_name = item.text(0)
                 folder_path = self.folder_input.text()
+                original_path = os.path.join(folder_path, original_name)
                 parent_folder_name = os.path.basename(os.path.dirname(folder_path))
-                new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, os.path.basename(folder_path), i, hash_count)
-                new_path = os.path.join(folder_path, new_name)
-                self.perform_rename(original_path, new_path)
+                if self.should_rename_file(original_name):
+                    new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, os.path.basename(folder_path), i, hash_count)
+                    new_path = os.path.join(folder_path, new_name)
+                    self.perform_rename(original_path, new_path)
 
         self.refresh_file_lists()
 
@@ -298,21 +317,35 @@ class FileOrganizer(QWidget):
                 for j in range(item.childCount()):
                     file_item = item.child(j)
                     original_name = file_item.text(0)
-                    new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, folder_name, j, hash_count)
-                    rename_data.append((folder_path, original_name, new_name))
+                    if self.should_rename_file(original_name):  # 仅在需要重命名时添加到预览数据
+                        new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, folder_name, j, hash_count)
+                        rename_data.append((folder_path, original_name, new_name))
             else:
                 # 处理单个文件
                 original_name = item.text(0)
                 folder_path = self.folder_input.text()
                 parent_folder_name = os.path.basename(os.path.dirname(folder_path))
-                new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, os.path.basename(folder_path), i, hash_count)
-                rename_data.append((folder_path, original_name, new_name))
+                if self.should_rename_file(original_name):  # 仅在需要重命名时添加到预览数据
+                    new_name = self.generate_new_name(original_name, prefix, replace_text, parent_folder_name, os.path.basename(folder_path), i, hash_count)
+                    rename_data.append((folder_path, original_name, new_name))
 
         if rename_data:
             dialog = PreviewDialog(rename_data)
             dialog.exec_()
         else:
             print("没有可预览的重命名数据")
+
+    def should_rename_file(self, filename):
+        # 检查文件后缀是否需要重命名
+        if filename.endswith('.jpg') and not self.jpg_checkbox.isChecked():
+            return False
+        if filename.endswith('.txt') and not self.txt_checkbox.isChecked():
+            return False
+        if filename.endswith('.xml') and not self.xml_checkbox.isChecked():
+            return False
+        if filename.endswith('.png') and not self.jpg_checkbox.isChecked():
+            return False
+        return True
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
