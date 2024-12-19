@@ -198,6 +198,8 @@ class FileOrganizer(QWidget):
             folder_item = self.right_list.topLevelItem(i)
             folder_name = folder_item.text(0)
             folder_path = os.path.join(self.folder_input.text(), folder_name)
+            parent_folder_name = os.path.basename(os.path.dirname(folder_path))
+            print(f"Parent Folder Name: {parent_folder_name}")
 
             for j in range(folder_item.childCount()):
                 file_item = folder_item.child(j)
@@ -214,7 +216,10 @@ class FileOrganizer(QWidget):
                     else:
                         new_name = prefix
 
+                    # 确保$$P替换逻辑在此处执行
+                    new_name = new_name.replace('$$p', f'{parent_folder_name}_{folder_name}')
                     new_name = new_name.replace('$p', folder_name)
+                    
                     file_extension = os.path.splitext(original_name)[1]
 
                     if '*' in prefix:
@@ -258,6 +263,7 @@ class FileOrganizer(QWidget):
             folder_item = self.right_list.topLevelItem(i)
             folder_name = folder_item.text(0)
             folder_path = os.path.join(self.folder_input.text(), folder_name)
+            parent_folder_name = os.path.basename(os.path.dirname(folder_path))
 
             for j in range(folder_item.childCount()):
                 file_item = folder_item.child(j)
@@ -273,7 +279,10 @@ class FileOrganizer(QWidget):
                     else:
                         new_name = prefix
 
+                    # 确保$$P替换逻辑在此处执行
+                    new_name = new_name.replace('$$p', f'{parent_folder_name}_{folder_name}')
                     new_name = new_name.replace('$p', folder_name)
+                    
                     file_extension = os.path.splitext(original_name)[1]
 
                     if '*' in prefix:
