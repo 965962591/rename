@@ -38,6 +38,13 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         self.shortcut_esc = QShortcut(QKeySequence(Qt.Key_Escape), self)
         self.shortcut_esc.activated.connect(self.close)
         
+        # 添加Ctrl+A和Ctrl+D快捷键
+        self.shortcut_rotate_left = QShortcut(QKeySequence("Ctrl+A"), self)
+        self.shortcut_rotate_left.activated.connect(self.rotate_left)
+
+        self.shortcut_rotate_right = QShortcut(QKeySequence("Ctrl+D"), self)
+        self.shortcut_rotate_right.activated.connect(self.rotate_right)
+
     def init_ui(self):
         # 设置主界面图标以及标题
         # icon_path = os.path.join(os.path.dirname(__file__), "images", "viewer.ico")
@@ -144,6 +151,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
             self.start_pos = event.globalPos()  # 更新起始位置
 
             for view in self.graphics_views:
+                # 直接移动视图的场景位置，而不是滚动条
                 view.horizontalScrollBar().setValue(view.horizontalScrollBar().value() - delta.x())
                 view.verticalScrollBar().setValue(view.verticalScrollBar().value() - delta.y())
 
@@ -177,6 +185,25 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
             center = view.mapToScene(view.viewport().rect().center())
             view.scale(zoom_factor, zoom_factor)
             view.centerOn(center)
+
+    def rotate_left(self):
+        self.rotate_image(-90)
+
+    def rotate_right(self):
+        self.rotate_image(90)
+
+    def rotate_image(self, angle):
+        # 获取鼠标的全局位置
+        cursor_pos = QtGui.QCursor.pos()
+        # 将全局位置转换为窗口内的位置
+        pos = self.mapFromGlobal(cursor_pos)
+        
+        for view in self.graphics_views:
+            # 使用 mapFromParent 将全局坐标转换为 view 的本地坐标
+            local_pos = view.mapFromParent(pos)
+            if view.rect().contains(local_pos):
+                view.rotate(angle)
+                break
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
