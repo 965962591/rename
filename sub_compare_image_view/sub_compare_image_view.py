@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QIcon, QImage, QPixmap, QKeySequence, QFontDatabase, QFont, QPainter, QCursor
 from PyQt5.QtCore import Qt, QEvent, QSize, QPoint
 from PIL import Image
+from fractions import Fraction
 
 one_pic = ['C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg']
 two_pic = ['C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg', 'C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/001_test_A_10_Lux_.jpg']
@@ -208,11 +209,39 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                     Image.ExifTags.TAGS.get(tag, tag): value
                     for tag, value in exif_data.items()
                 }
-                # 这里只显示部分常用的 EXIF 信息
-                exif_info = "\n".join([
-                    f"{k}: {v}" for k, v in exif.items()
-                    if k in ['DateTime', 'Model', 'ExposureTime', 'FNumber', 'ISOSpeedRatings']
-                ])
+                exif_info_list = []
+                for k, v in exif.items():
+                    if k in ['DateTime', 'Model', 'ExposureTime', 'FNumber', 'ISOSpeedRatings']:
+                        if k == 'ExposureTime':
+                            # 格式化 ExposureTime 为分数形式
+                            exposure_time = "未知格式"  # 默认值
+                            if isinstance(v, tuple) and len(v) == 2 and v[1] != 0:
+                                exposure_time = f"{v[0]}/{v[1]}"
+                            elif isinstance(v, (int, float)):
+                                try:
+                                    # 将 limit_denominator 设置为 50 以获得更合理的分数表示
+                                    fraction = Fraction(v).limit_denominator(50)
+                                    exposure_time = f"{fraction.numerator}/{fraction.denominator}"
+                                except Exception:
+                                    exposure_time = str(v)
+                            elif hasattr(v, 'numerator') and hasattr(v, 'denominator'):
+                                # 处理类似 Exif.Ratio 的类型
+                                try:
+                                    fraction = Fraction(v.numerator, v.denominator).limit_denominator(50)
+                                    exposure_time = f"{fraction.numerator}/{fraction.denominator}"
+                                except Exception:
+                                    exposure_time = "未知格式"
+                            elif isinstance(v, str):
+                                # 尝试从字符串中解析分数
+                                try:
+                                    fraction = Fraction(v).limit_denominator(50)
+                                    exposure_time = f"{fraction.numerator}/{fraction.denominator}"
+                                except Exception:
+                                    exposure_time = v
+                            exif_info_list.append(f"{k}: {exposure_time}")
+                        else:
+                            exif_info_list.append(f"{k}: {v}")
+                exif_info = "\n".join(exif_info_list)
             else:
                 exif_info = "无EXIF信息"
             return exif_info
