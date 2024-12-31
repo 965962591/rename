@@ -199,6 +199,15 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                 view.set_exif_visibility(state == Qt.Checked)
 
     def get_exif_info(self, path):
+        # 定义 EXIF 标签的中文映射
+        exif_tags_cn = {
+            'DateTime': '时间',
+            'Model': '机型',
+            'ExposureTime': '曝光时间',
+            'FNumber': '光圈',
+            'ISOSpeedRatings': 'ISO'
+        }
+        
         if not os.path.exists(path):
             return f"图片路径无效: {path}"
         try:
@@ -211,7 +220,8 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                 }
                 exif_info_list = []
                 for k, v in exif.items():
-                    if k in ['DateTime', 'Model', 'ExposureTime', 'FNumber', 'ISOSpeedRatings']:
+                    if k in exif_tags_cn:  # 使用中文标签
+                        k_cn = exif_tags_cn[k]
                         if k == 'ExposureTime':
                             # 格式化 ExposureTime 为分数形式
                             exposure_time = "未知格式"  # 默认值
@@ -238,9 +248,9 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                                     exposure_time = f"{fraction.numerator}/{fraction.denominator}"
                                 except Exception:
                                     exposure_time = v
-                            exif_info_list.append(f"{k}: {exposure_time}")
+                            exif_info_list.append(f"{k_cn}: {exposure_time}")
                         else:
-                            exif_info_list.append(f"{k}: {v}")
+                            exif_info_list.append(f"{k_cn}: {v}")
                 exif_info = "\n".join(exif_info_list)
             else:
                 exif_info = "无EXIF信息"
