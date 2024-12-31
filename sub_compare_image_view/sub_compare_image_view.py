@@ -29,7 +29,8 @@ class MyGraphicsView(QGraphicsView):
         # 添加 QLabel 显示 EXIF 信息
         self.exif_label = QLabel(self)
         self.exif_label.setText(self.exif_text if self.exif_text else "")
-        self.exif_label.setStyleSheet("background-color: rgba(255, 255, 255, 150); color: red;")
+        # 设置仅文本颜色，不使用背景颜色
+        self.exif_label.setStyleSheet("color: red; background-color: transparent;")
         self.exif_label.setFont(QFont("Arial", 10))
         self.exif_label.move(5, 5)  # 固定在左上角，适当调整偏移量
         self.exif_label.setVisible(self.show_exif)
@@ -42,6 +43,10 @@ class MyGraphicsView(QGraphicsView):
     def set_exif_visibility(self, visible: bool):
         self.show_exif = visible
         self.exif_label.setVisible(visible)
+
+    def resizeEvent(self, event):
+        super(MyGraphicsView, self).resizeEvent(event)
+        self.exif_label.move(5, 5)  # 保持在左上角
 
 class MyMainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
@@ -179,6 +184,9 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
             # 设置初始缩放比例
             initial_scale = 0.5  # 例如，缩小到50%
             view.scale(initial_scale, initial_scale)
+            
+            # 根据复选框状态设置 EXIF 信息的可见性
+            view.set_exif_visibility(self.checkBox_1.isChecked())
 
             self.tableWidget_medium.setCellWidget(0, index, view)
             self.graphics_views.append(view)
