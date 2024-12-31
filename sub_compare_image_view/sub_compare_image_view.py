@@ -1,7 +1,7 @@
 from ui.sub_ui import Ui_MainWindow
 import sys, os
 from PyQt5 import QtWidgets, QtGui
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QLabel, QHeaderView, QWidget, QShortcut
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QLabel, QHeaderView, QWidget, QShortcut, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 from PyQt5.QtGui import QIcon, QImage, QPixmap, QKeySequence, QStandardItem
 from PyQt5.QtCore import Qt, QEvent, QSize, QPoint
 from PIL import Image
@@ -10,12 +10,39 @@ one_pic = ['C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_te
 two_pic = ['C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg', 'C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/001_test_A_10_Lux_.jpg']
 three_pic = ['C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg', 'C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/001_test_A_10_Lux_.jpg', 'C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/002_test_A_10_Lux_.jpg']
 
+class MyGraphicsView(QGraphicsView):
+    def __init__(self, *args, **kwargs):
+        super(MyGraphicsView, self).__init__(*args, **kwargs)
+        self.setRenderHint(QtGui.QPainter.Antialiasing)
+        self.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+
+    def wheelEvent(self, event: QEvent):
+        zoom_factor = 1.2 if event.angleDelta().y() > 0 else 1/1.2
+        current_scale = self.transform().m11()
+        min_scale = 0.5
+        max_scale = 10.0
+        new_scale = current_scale * zoom_factor
+
+        if min_scale <= new_scale <= max_scale:
+            center = self.mapToScene(self.viewport().rect().center())
+            self.scale(zoom_factor, zoom_factor)
+            self.centerOn(center)
+            event.accept()
+        else:
+            event.ignore()
+
 class MyMainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
         super(MyMainWindow, self).__init__(parent)
         self.setupUi(self)
 
         self.images = []     # 初始化图片列表
+        self.graphics_views = []  # 确保在这里初始化
         self.init_ui()       # 调用初始化界面组件的方法
         self.showMaximized() # 设置窗口为最大化模式
         # 创建快捷键，按住Esc键退出整个界面
@@ -93,81 +120,66 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         self.label_bottom.setFont(custom_font)  # 应用自定义字体
 
     def set_images(self, image_paths):
-        # 清空现有的表格内容
         self.images.clear()
         self.tableWidget_medium.clearContents()
         self.tableWidget_medium.setColumnCount(len(image_paths))
-        self.tableWidget_medium.setRowCount(1)  # 设置行数为1
+        self.tableWidget_medium.setRowCount(1)
 
         folder_names = [os.path.basename(os.path.dirname(path)) for path in image_paths]
-        self.tableWidget_medium.setHorizontalHeaderLabels(folder_names)  # 设置列名为文件夹名
+        self.tableWidget_medium.setHorizontalHeaderLabels(folder_names)
 
         for index, path in enumerate(image_paths):
-            if not os.path.exists(path):  # 检查图片路径是否有效
+            if not os.path.exists(path):
                 print(f"图片路径无效: {path}")
                 continue
             pixmap = QPixmap(path)
-            if pixmap.isNull():  # 检查图片是否加载成功
+            if pixmap.isNull():
                 print(f"图片加载失败: {path}")
                 continue
-            
-            # 确保在这里设置 original_pixmap
-            label = QLabel(self)
-            label.original_pixmap = pixmap  # 设置原始图片
-            label.setPixmap(pixmap.scaled(QSize(pixmap.width()//5, pixmap.height()//5), aspectRatioMode=Qt.KeepAspectRatio, transformMode=Qt.SmoothTransformation))
-            label.setAlignment(Qt.AlignCenter)
-            label.setScaledContents(False)  # 不自动缩放到标签大小
-            label.is_moving = False
-            label.start_pos = QPoint()
-            label.setMouseTracking(True)  # 启用鼠标跟踪
-            self.tableWidget_medium.setCellWidget(0, index, label)
-            self.images.append(label)
 
-    def wheelEvent(self, event: QEvent):
-        delta = event.angleDelta().y()
-        zoom_factor = 1.2 if delta > 0 else 1/1.2
-        max_zoom_factor = 6.0  # 设置最大缩放比例
-        min_zoom_factor = 0.1  # 设置最小缩放比例
+            scene = QGraphicsScene(self)
+            item = QGraphicsPixmapItem(pixmap)
+            scene.addItem(item)
 
-        for label in self.images:
-            current_pixmap = label.pixmap()
-            if current_pixmap is not None:
-                current_width = current_pixmap.width()
-                current_height = current_pixmap.height()
-                new_width = int(current_width * zoom_factor)
-                new_height = int(current_height * zoom_factor)
-
-                # 计算当前缩放比例
-                current_zoom_factor = current_width / label.original_pixmap.width()
-
-                # 限制缩放比例在最小和最大之间
-                if current_zoom_factor * zoom_factor > max_zoom_factor or current_zoom_factor * zoom_factor < min_zoom_factor:
-                    continue
-
-                pixmap = label.original_pixmap.scaled(QSize(new_width, new_height), aspectRatioMode=Qt.KeepAspectRatio, transformMode=Qt.SmoothTransformation)
-                label.setPixmap(pixmap)
-                label.setAlignment(Qt.AlignCenter)
+            view = MyGraphicsView(scene, self)
+            self.tableWidget_medium.setCellWidget(0, index, view)
+            self.graphics_views.append(view)
 
     def mousePressEvent(self, event: QEvent):
-        for label in self.images:
-            if label.geometry().contains(event.pos()):
-                label.is_moving = True
-                label.start_pos = event.pos()
-                label.start_pixmap_pos = label.pos()
-                break
+        if event.button() == Qt.LeftButton:
+            for label in self.images:
+                if label.geometry().contains(self.mapFromGlobal(event.globalPos())):
+                    print("Mouse press detected on image")
+                    label.is_moving = True
+                    label.start_pos = event.globalPos()
+                    label.offset = label.start_pos - label.pos()  # 记录偏移量
+                    break
 
     def mouseMoveEvent(self, event: QEvent):
-        if any(label.is_moving for label in self.images):
+        if event.buttons() & Qt.LeftButton:
             for label in self.images:
                 if label.is_moving:
-                    current_pos = label.start_pixmap_pos + (event.pos() - label.start_pos)
-                    label.move(current_pos)
-                    label.start_pos = event.pos()
+                    print("Mouse move detected")
+                    delta = event.globalPos() - label.start_pos
+                    label.start_pos = event.globalPos()  # 更新起始位置
+
+                    # 计算新的显示区域
+                    new_offset = label.offset + delta
+                    label.offset = new_offset  # 更新偏移量
+
+                    # 确保显示区域在图片范围内
+                    rect = label.original_pixmap.rect().translated(-new_offset)
+                    rect = rect.intersected(label.original_pixmap.rect())
+                    cropped_pixmap = label.original_pixmap.copy(rect)
+                    label.setPixmap(cropped_pixmap.scaled(label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
                     break
 
     def mouseReleaseEvent(self, event: QEvent):
-        for label in self.images:
-            label.is_moving = False
+        if event.button() == Qt.LeftButton:
+            for label in self.images:
+                if label.is_moving:
+                    print("Mouse release detected")
+                label.is_moving = False
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
