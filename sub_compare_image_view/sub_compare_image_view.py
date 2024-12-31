@@ -32,6 +32,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
 
         self.images = []     # 初始化图片列表
         self.graphics_views = []  # 确保在这里初始化
+        self.pixmap_items = []    # 新增：存储每个图片项
         self.init_ui()       # 调用初始化界面组件的方法
         self.showMaximized() # 设置窗口为最大化模式
         # 创建快捷键，按住Esc键退出整个界面
@@ -117,6 +118,8 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
 
     def set_images(self, image_paths):
         self.images.clear()
+        self.graphics_views.clear()  # 清理之前的视图列表
+        self.pixmap_items.clear()  # 清空之前的图片项
         self.tableWidget_medium.clearContents()
         self.tableWidget_medium.setColumnCount(len(image_paths))
         self.tableWidget_medium.setRowCount(1)
@@ -134,16 +137,24 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                 continue
 
             scene = QGraphicsScene(self)
-            item = QGraphicsPixmapItem(pixmap)
-            scene.addItem(item)
+            pixmap_item = QGraphicsPixmapItem(pixmap)
+            # 设置变换原点为图片中心
+            pixmap_item.setTransformOriginPoint(pixmap.rect().center())
+            scene.addItem(pixmap_item)
+            self.pixmap_items.append(pixmap_item)  # 存储图片项
 
             view = MyGraphicsView(scene, self)
+            # 设置初始缩放比例
+            initial_scale = 0.5  # 例如，缩小到50%
+            view.scale(initial_scale, initial_scale)
+
             self.tableWidget_medium.setCellWidget(0, index, view)
             self.graphics_views.append(view)
 
     def mousePressEvent(self, event: QEvent):
         if event.button() == Qt.LeftButton:
             self.start_pos = event.globalPos()
+
 
     def mouseMoveEvent(self, event: QEvent):
         if event.buttons() & Qt.LeftButton:
@@ -202,7 +213,12 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
             # 使用 mapFromParent 将全局坐标转换为 view 的本地坐标
             local_pos = view.mapFromParent(pos)
             if view.rect().contains(local_pos):
-                view.rotate(angle)
+                scene_pos = view.mapToScene(local_pos)
+                items = view.scene().items(scene_pos)
+                if items:
+                    pixmap_item = items[0]
+                    # 设置旋转围绕中心
+                    pixmap_item.setRotation(pixmap_item.rotation() + angle)
                 break
 
 if __name__ == "__main__":
