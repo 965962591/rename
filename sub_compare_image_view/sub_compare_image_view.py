@@ -126,16 +126,24 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
     def wheelEvent(self, event: QEvent):
         delta = event.angleDelta().y()
         zoom_factor = 1.2 if delta > 0 else 1/1.2
+        max_zoom_factor = 6.0  # 设置最大缩放比例
+        min_zoom_factor = 0.1  # 设置最小缩放比例
+
         for label in self.images:
-            current_pixmap = label.pixmap()  # 使用当前显示的图片进行缩放
+            current_pixmap = label.pixmap()
             if current_pixmap is not None:
-                new_width = int(current_pixmap.width() * zoom_factor)
-                new_height = int(current_pixmap.height() * zoom_factor)
-                # 确保缩放后的尺寸不小于原始尺寸的某个比例
-                min_width = label.original_pixmap.width() // 10
-                min_height = label.original_pixmap.height() // 10
-                if new_width < min_width or new_height < min_height:
+                current_width = current_pixmap.width()
+                current_height = current_pixmap.height()
+                new_width = int(current_width * zoom_factor)
+                new_height = int(current_height * zoom_factor)
+
+                # 计算当前缩放比例
+                current_zoom_factor = current_width / label.original_pixmap.width()
+
+                # 限制缩放比例在最小和最大之间
+                if current_zoom_factor * zoom_factor > max_zoom_factor or current_zoom_factor * zoom_factor < min_zoom_factor:
                     continue
+
                 pixmap = label.original_pixmap.scaled(QSize(new_width, new_height), aspectRatioMode=Qt.KeepAspectRatio, transformMode=Qt.SmoothTransformation)
                 label.setPixmap(pixmap)
                 label.setAlignment(Qt.AlignCenter)
