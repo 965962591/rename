@@ -22,19 +22,8 @@ class MyGraphicsView(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
 
     def wheelEvent(self, event: QEvent):
-        zoom_factor = 1.2 if event.angleDelta().y() > 0 else 1/1.2
-        current_scale = self.transform().m11()
-        min_scale = 0.5
-        max_scale = 10.0
-        new_scale = current_scale * zoom_factor
-
-        if min_scale <= new_scale <= max_scale:
-            center = self.mapToScene(self.viewport().rect().center())
-            self.scale(zoom_factor, zoom_factor)
-            self.centerOn(center)
-            event.accept()
-        else:
-            event.ignore()
+        # 将事件传递给父级窗口处理
+        self.parent().wheelEvent(event)
 
 class MyMainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
@@ -147,39 +136,47 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
 
     def mousePressEvent(self, event: QEvent):
         if event.button() == Qt.LeftButton:
-            for label in self.images:
-                if label.geometry().contains(self.mapFromGlobal(event.globalPos())):
-                    print("Mouse press detected on image")
-                    label.is_moving = True
-                    label.start_pos = event.globalPos()
-                    label.offset = label.start_pos - label.pos()  # 记录偏移量
-                    break
+            self.start_pos = event.globalPos()
 
     def mouseMoveEvent(self, event: QEvent):
         if event.buttons() & Qt.LeftButton:
-            for label in self.images:
-                if label.is_moving:
-                    print("Mouse move detected")
-                    delta = event.globalPos() - label.start_pos
-                    label.start_pos = event.globalPos()  # 更新起始位置
+            delta = event.globalPos() - self.start_pos
+            self.start_pos = event.globalPos()  # 更新起始位置
 
-                    # 计算新的显示区域
-                    new_offset = label.offset + delta
-                    label.offset = new_offset  # 更新偏移量
-
-                    # 确保显示区域在图片范围内
-                    rect = label.original_pixmap.rect().translated(-new_offset)
-                    rect = rect.intersected(label.original_pixmap.rect())
-                    cropped_pixmap = label.original_pixmap.copy(rect)
-                    label.setPixmap(cropped_pixmap.scaled(label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-                    break
+            for view in self.graphics_views:
+                view.horizontalScrollBar().setValue(view.horizontalScrollBar().value() - delta.x())
+                view.verticalScrollBar().setValue(view.verticalScrollBar().value() - delta.y())
 
     def mouseReleaseEvent(self, event: QEvent):
         if event.button() == Qt.LeftButton:
-            for label in self.images:
-                if label.is_moving:
-                    print("Mouse release detected")
-                label.is_moving = False
+            print("Mouse release detected")
+
+    def wheelEvent(self, event: QEvent):
+        zoom_factor = 1.2 if event.angleDelta().y() > 0 else 1/1.2
+        if event.modifiers() & Qt.ControlModifier:
+            # 遍历 graphics_views 找到鼠标所在的 MyGraphicsView
+            pos = self.mapFromGlobal(event.globalPos())
+            for view in self.graphics_views:
+                # 使用 mapFromParent 将全局坐标转换为 view 的本地坐标
+                local_pos = view.mapFromParent(self.mapFromGlobal(event.globalPos()))
+                if view.rect().contains(local_pos):
+                    self.zoom_view(view, zoom_factor)
+                    break
+        else:
+            # 缩放所有图片
+            for view in self.graphics_views:
+                self.zoom_view(view, zoom_factor)
+
+    def zoom_view(self, view, zoom_factor):
+        current_scale = view.transform().m11()
+        min_scale = 0.1
+        max_scale = 10.0
+        new_scale = current_scale * zoom_factor
+
+        if min_scale <= new_scale <= max_scale:
+            center = view.mapToScene(view.viewport().rect().center())
+            view.scale(zoom_factor, zoom_factor)
+            view.centerOn(center)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
