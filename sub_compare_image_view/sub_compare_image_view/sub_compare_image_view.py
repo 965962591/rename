@@ -14,9 +14,11 @@ import piexif
 import matplotlib.pyplot as plt
 import io
 
-one_pic = ["C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg"]
-two_pic = ["C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/1st_IMG_20241210_102946.jpg", "C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/001_test_A_10_Lux_.jpg"]
-three_pic = ["C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/1st_IMG_20241210_102946.jpg", "C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/001_test_A_10_Lux_.jpg", "C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/002_test_A_10_Lux_.jpg"]
+one_pic = ['D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081113.jpg']
+two_pic = ['D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081126.jpg', 'D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081300.jpg']
+three_pic = ['D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081113.jpg', 'D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081124.jpg', 'D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081126.jpg']
+
+
 class ImageTransform:
     """图片旋转exif信息调整类"""
     # 定义EXIF方向值对应的QTransform变换
@@ -62,6 +64,7 @@ class ImageTransform:
             print(f"处理图标失败 {icon_path}: {str(e)}")
             return QIcon()
 
+
 class MyGraphicsView(QGraphicsView):
     def __init__(self, scene, exif_text=None, *args, **kwargs):
         super(MyGraphicsView, self).__init__(scene, *args, **kwargs)
@@ -82,33 +85,23 @@ class MyGraphicsView(QGraphicsView):
         self.pixmap_items = []  # 初始化 pixmap_items 列表
         print("Initialized MyGraphicsView with empty pixmap_items")
 
-        # 创建一个容器部件用于布局
-        self.overlay_widget = QWidget(self)
-        self.overlay_layout = QVBoxLayout(self.overlay_widget)
-        self.overlay_layout.setContentsMargins(5, 5, 5, 5)
-        self.overlay_layout.setSpacing(5)
-        self.overlay_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-
         # 添加 QLabel 显示 EXIF 信息
         self.exif_label = QLabel(self)
         self.exif_label.setText(self.exif_text if self.exif_text else "")
         # 设置仅文本颜色，不使用背景颜色
         self.exif_label.setStyleSheet("color: red; background-color: transparent;")
         self.exif_label.setFont(QFont("Arial", 10))
+        self.exif_label.move(5, 5)  # 固定在左上角，适当调整偏移量
         self.exif_label.setVisible(self.show_exif)
         self.exif_label.setAttribute(Qt.WA_TransparentForMouseEvents)  # 让标签不拦截鼠标事件
-        self.overlay_layout.addWidget(self.exif_label)
 
         # 添加 QLabel 显示直方图
         self.histogram_label = QLabel(self)
-        self.histogram_label.setStyleSheet("border: none;")  # 去除边框
+        self.histogram_label.setStyleSheet("border: 1px solid black;")
+        self.histogram_label.move(5, 5 + self.exif_label.height() + 5)  # 位置在 exif_label 下方
         self.histogram_label.setVisible(self.show_histogram)
         self.histogram_label.setFixedSize(150, 100)  # 根据需要调整大小
         self.histogram_label.setAttribute(Qt.WA_TransparentForMouseEvents)  # 不拦截鼠标事件
-        self.overlay_layout.addWidget(self.histogram_label)
-
-        # 设置 overlay_widget 使用布局
-        self.overlay_widget.setLayout(self.overlay_layout)
 
     def set_histogram_data(self, histogram):
         if histogram is None:
@@ -122,10 +115,11 @@ class MyGraphicsView(QGraphicsView):
             total_pixels = sum(histogram)
             relative_frequency = [count / total_pixels for count in histogram]
             # 绘制步进图以保证直方图连续
-            # ax.plot(range(len(relative_frequency)), relative_frequency, color='gray', linewidth=1)
-            # ax.fill_between(range(len(relative_frequency)), relative_frequency, color='gray', alpha=0.7)
-            ax.plot(range(len(relative_frequency)), relative_frequency, color='skyblue', linewidth=1)
-            ax.fill_between(range(len(relative_frequency)), relative_frequency, color='skyblue', alpha=0.7)            
+            ax.plot(range(len(relative_frequency)), relative_frequency, color='gray', linewidth=1)
+            ax.fill_between(range(len(relative_frequency)), relative_frequency, color='gray', alpha=0.7)
+            # ax.set_title('亮度直方图', fontsize=10)
+            # ax.set_xlabel('亮度', fontsize=8)
+            # ax.set_ylabel('频率', fontsize=8)
             ax.set_xlim(0, 255)
             ax.set_ylim(0, max(relative_frequency)*1.1)
             ax.yaxis.set_visible(False)  # 隐藏 Y 轴
@@ -162,9 +156,16 @@ class MyGraphicsView(QGraphicsView):
 
     def resizeEvent(self, event):
         super(MyGraphicsView, self).resizeEvent(event)
-        # 自动调整 overlay_widget 的位置和大小
-        self.overlay_widget.setGeometry(0, 0, self.width(), self.height())
+        self.exif_label.move(5, 5)  # 保持在左上角
 
+        # 根据 exif_label 的高度动态设置 histogram_label 的位置
+        exif_label_height = self.exif_label.height()
+        padding = 5  # 两个标签之间的间隔
+        self.histogram_label.move(5, 5 + exif_label_height + padding)
+
+        # 可选：根据视图大小调整 histogram_label 的大小
+        # self.histogram_label.setFixedWidth(self.width() - 10)  # 保持左右留边
+        # self.histogram_label.setFixedHeight(100)  # 固定高度，根据需要调整
 class SubMainWindow(QMainWindow, Ui_MainWindow):
     closed = pyqtSignal()
     def __init__(self, images_path_list, parent=None):
@@ -196,15 +197,6 @@ class SubMainWindow(QMainWindow, Ui_MainWindow):
 
         self.shortcut_rotate_right = QShortcut(QKeySequence("Ctrl+D"), self)
         self.shortcut_rotate_right.activated.connect(self.rotate_right)
-
-        # 添加q和w快捷键，设置为应用程序级别
-        self.shortcut_q = QShortcut(QKeySequence("q"), self)
-        self.shortcut_q.setContext(Qt.ApplicationShortcut)
-        self.shortcut_q.activated.connect(lambda: self.handle_overlay('q'))
-
-        self.shortcut_w = QShortcut(QKeySequence("w"), self)
-        self.shortcut_w.setContext(Qt.ApplicationShortcut)
-        self.shortcut_w.activated.connect(lambda: self.handle_overlay('w'))
 
         # 连接复选框信号到槽函数
         self.checkBox_1.stateChanged.connect(self.toggle_exif_info)
@@ -509,7 +501,7 @@ class SubMainWindow(QMainWindow, Ui_MainWindow):
     def zoom_view(self, view, zoom_factor):
         current_scale = view.transform().m11()
         min_scale = 0.1
-        max_scale = 100.0
+        max_scale = 10.0
         new_scale = current_scale * zoom_factor
 
         if min_scale <= new_scale <= max_scale:
