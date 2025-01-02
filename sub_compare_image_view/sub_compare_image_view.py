@@ -9,6 +9,9 @@ from PyQt5.QtCore import Qt, QEvent, QSize, QPoint
 from PIL import Image
 from fractions import Fraction
 
+import matplotlib.pyplot as plt
+import io
+
 one_pic = ['C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg']
 two_pic = ['C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg', 'C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/001_test_A_10_Lux_.jpg']
 three_pic = ['C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg', 'C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/001_test_A_10_Lux_.jpg', 'C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/002_test_A_10_Lux_.jpg']
@@ -27,6 +30,9 @@ class MyGraphicsView(QGraphicsView):
         self.exif_text = exif_text  # 存储 EXIF 信息
         self.show_exif = True if exif_text else False  # 控制 EXIF 显示
 
+        self.histogram = None  # 存储直方图数据
+        self.show_histogram = False  # 控制直方图显示
+
         # 添加 QLabel 显示 EXIF 信息
         self.exif_label = QLabel(self)
         self.exif_label.setText(self.exif_text if self.exif_text else "")
@@ -36,6 +42,53 @@ class MyGraphicsView(QGraphicsView):
         self.exif_label.move(5, 5)  # 固定在左上角，适当调整偏移量
         self.exif_label.setVisible(self.show_exif)
         self.exif_label.setAttribute(Qt.WA_TransparentForMouseEvents)  # 让标签不拦截鼠标事件
+
+        # 添加 QLabel 显示直方图
+        self.histogram_label = QLabel(self)
+        self.histogram_label.setStyleSheet("border: 1px solid black;")
+        self.histogram_label.setVisible(self.show_histogram)
+        self.histogram_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+    def set_histogram_data(self, histogram):
+        if histogram is None:
+            self.histogram_label.setText("无直方图数据")
+            return
+        # 使用 matplotlib 生成直方图图像
+        try:
+            plt.figure(figsize=(4, 3), dpi=50, facecolor='none', edgecolor='none')  # 设置背景透明
+            ax = plt.gca()
+            # 计算相对频率
+            total_pixels = sum(histogram)
+            relative_frequency = [count / total_pixels for count in histogram]
+            # 绘制步进图以保证直方图连续
+            ax.plot(range(len(relative_frequency)), relative_frequency, color='gray', linewidth=1)
+            ax.fill_between(range(len(relative_frequency)), relative_frequency, color='gray', alpha=0.7)
+            # ax.set_title('亮度直方图', fontsize=10)
+            # ax.set_xlabel('亮度', fontsize=8)
+            # ax.set_ylabel('频率', fontsize=8)
+            ax.set_xlim(0, 255)
+            ax.set_ylim(0, max(relative_frequency)*1.1)
+            ax.yaxis.set_visible(False)  # 隐藏 Y 轴
+            ax.xaxis.set_tick_params(labelsize=8)
+            plt.tight_layout()
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format='PNG', transparent=True, bbox_inches='tight', pad_inches=0)
+            buf.seek(0)
+            plt.close()
+
+            histogram_pixmap = QPixmap()
+            histogram_pixmap.loadFromData(buf.getvalue(), 'PNG')
+            buf.close()
+
+            self.histogram_label.setPixmap(histogram_pixmap)
+        except Exception as e:
+            print(f"生成直方图图像失败: {e}")
+            self.histogram_label.setText("无法生成直方图")
+
+    def set_histogram_visibility(self, visible: bool):
+        self.show_histogram = visible
+        self.histogram_label.setVisible(visible)
 
     def wheelEvent(self, event: QEvent):
         # 将事件传递给父级窗口处理
@@ -48,6 +101,7 @@ class MyGraphicsView(QGraphicsView):
     def resizeEvent(self, event):
         super(MyGraphicsView, self).resizeEvent(event)
         self.exif_label.move(5, 5)  # 保持在左上角
+        self.histogram_label.move(5, 50)  # 调整直方图的位置
 
 class MyMainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
@@ -58,6 +112,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         self.graphics_views = []    # 确保在这里初始化
         self.pixmap_items = []      # 存储每个图片项
         self.exif_texts = []        # 存储每个视图的 EXIF 信息
+        self.histograms = []        # 存储每个视图的直方图
 
         self.init_ui()              # 调用初始化界面组件的方法
         self.showMaximized()        # 设置窗口为最大化模式
@@ -72,6 +127,10 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
 
         self.shortcut_rotate_right = QShortcut(QKeySequence("Ctrl+D"), self)
         self.shortcut_rotate_right.activated.connect(self.rotate_right)
+
+        # 连接复选框信号到槽函数
+        self.checkBox_1.stateChanged.connect(self.toggle_exif_info)
+        self.checkBox_2.stateChanged.connect(self.toggle_histogram_info)  # 新增
 
     def init_ui(self):
         # 设置主界面图标以及标题
@@ -150,6 +209,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         self.graphics_views.clear()    # 清理之前的视图列表
         self.pixmap_items.clear()      # 清空之前的图片项
         self.exif_texts.clear()        # 清空之前的 EXIF 信息
+        self.histograms.clear()        # 清空之前的直方图信息
         self.tableWidget_medium.clearContents()
         self.tableWidget_medium.setColumnCount(len(image_paths))
         self.tableWidget_medium.setRowCount(1)
@@ -161,11 +221,13 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
             if not os.path.exists(path):
                 print(f"图片路径无效: {path}")
                 self.exif_texts.append(None)
+                self.histograms.append(None)
                 continue
             pixmap = QPixmap(path)
             if pixmap.isNull():
                 print(f"图片加载失败: {path}")
                 self.exif_texts.append(None)
+                self.histograms.append(None)
                 continue
 
             scene = QGraphicsScene(self)
@@ -181,13 +243,24 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                 exif_info = "无EXIF信息"
             self.exif_texts.append(exif_info)
 
+            # 计算亮度直方图
+            histogram = self.calculate_brightness_histogram(path)
+            self.histograms.append(histogram)
+
             view = MyGraphicsView(scene, exif_info, self)
             # 设置初始缩放比例
             initial_scale = 0.5  # 例如，缩小到50%
             view.scale(initial_scale, initial_scale)
             
-            # 根据复选框状态设置 EXIF 信息的可见性
+            # 根据复选框状态设置 EXIF 信息和直方图的可见性
             view.set_exif_visibility(self.checkBox_1.isChecked())
+            view.set_histogram_visibility(self.checkBox_2.isChecked())
+
+            # 设置直方图数据
+            if self.histograms[index]:
+                view.set_histogram_data(self.histograms[index])
+            else:
+                view.set_histogram_data(None)
 
             self.tableWidget_medium.setCellWidget(0, index, view)
             self.graphics_views.append(view)
@@ -197,6 +270,23 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         for view, exif_text in zip(self.graphics_views, self.exif_texts):
             if exif_text:
                 view.set_exif_visibility(state == Qt.Checked)
+
+    def toggle_histogram_info(self, state):
+        print(f"切换直方图信息: {'显示' if state == Qt.Checked else '隐藏'}")
+        for view, histogram in zip(self.graphics_views, self.histograms):
+            if histogram:
+                view.set_histogram_visibility(state == Qt.Checked)
+
+    def calculate_brightness_histogram(self, path):
+        try:
+            image = Image.open(path).convert('L')  # 转换为灰度图
+            histogram = image.histogram()
+            # 只保留0-255的灰度值
+            histogram = histogram[:256]
+            return histogram
+        except Exception as e:
+            print(f"计算直方图失败: {path}\n错误: {e}")
+            return None
 
     def get_exif_info(self, path):
         # 定义 EXIF 标签的中文映射
