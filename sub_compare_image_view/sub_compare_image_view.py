@@ -57,7 +57,7 @@ class MyGraphicsView(QGraphicsView):
 
         # 添加 QLabel 显示直方图
         self.histogram_label = QLabel(self)
-        self.histogram_label.setStyleSheet("border: 1px solid black;")
+        self.histogram_label.setStyleSheet("border: none;")  # 去除边框
         self.histogram_label.setVisible(self.show_histogram)
         self.histogram_label.setFixedSize(150, 100)  # 根据需要调整大小
         self.histogram_label.setAttribute(Qt.WA_TransparentForMouseEvents)  # 不拦截鼠标事件
@@ -78,8 +78,10 @@ class MyGraphicsView(QGraphicsView):
             total_pixels = sum(histogram)
             relative_frequency = [count / total_pixels for count in histogram]
             # 绘制步进图以保证直方图连续
-            ax.plot(range(len(relative_frequency)), relative_frequency, color='gray', linewidth=1)
-            ax.fill_between(range(len(relative_frequency)), relative_frequency, color='gray', alpha=0.7)
+            # ax.plot(range(len(relative_frequency)), relative_frequency, color='gray', linewidth=1)
+            # ax.fill_between(range(len(relative_frequency)), relative_frequency, color='gray', alpha=0.7)
+            ax.plot(range(len(relative_frequency)), relative_frequency, color='skyblue', linewidth=1)
+            ax.fill_between(range(len(relative_frequency)), relative_frequency, color='skyblue', alpha=0.7)            
             ax.set_xlim(0, 255)
             ax.set_ylim(0, max(relative_frequency)*1.1)
             ax.yaxis.set_visible(False)  # 隐藏 Y 轴
