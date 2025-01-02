@@ -49,13 +49,17 @@ class MyGraphicsView(QGraphicsView):
         self.histogram_label.setVisible(self.show_histogram)
         self.histogram_label.setAttribute(Qt.WA_TransparentForMouseEvents)
 
+        # 设置直方图的固定大小
+        self.histogram_label.setFixedWidth(150)  # 根据需要调整宽度
+        self.histogram_label.setFixedHeight(100)  # 根据需要调整高度
+
     def set_histogram_data(self, histogram):
         if histogram is None:
             self.histogram_label.setText("无直方图数据")
             return
         # 使用 matplotlib 生成直方图图像
         try:
-            plt.figure(figsize=(4, 3), dpi=50, facecolor='none', edgecolor='none')  # 设置背景透明
+            plt.figure(figsize=(3, 2), dpi=100, facecolor='none', edgecolor='none')  # 设置背景透明
             ax = plt.gca()
             # 计算相对频率
             total_pixels = sum(histogram)
@@ -81,7 +85,9 @@ class MyGraphicsView(QGraphicsView):
             histogram_pixmap.loadFromData(buf.getvalue(), 'PNG')
             buf.close()
 
-            self.histogram_label.setPixmap(histogram_pixmap)
+            # 缩放直方图图像以适应 QLabel
+            self.histogram_label.setPixmap(histogram_pixmap.scaled(
+                self.histogram_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
         except Exception as e:
             print(f"生成直方图图像失败: {e}")
             self.histogram_label.setText("无法生成直方图")
@@ -101,7 +107,15 @@ class MyGraphicsView(QGraphicsView):
     def resizeEvent(self, event):
         super(MyGraphicsView, self).resizeEvent(event)
         self.exif_label.move(5, 5)  # 保持在左上角
-        self.histogram_label.move(5, 50)  # 调整直方图的位置
+
+        # 根据 exif_label 的高度动态设置 histogram_label 的位置
+        exif_label_height = self.exif_label.height()
+        padding = 5  # 两个标签之间的间隔
+        self.histogram_label.move(5, 5 + exif_label_height + padding)
+
+        # 可选：根据视图大小调整 histogram_label 的大小
+        # self.histogram_label.setFixedWidth(self.width() - 10)  # 保持左右留边
+        # self.histogram_label.setFixedHeight(100)  # 固定高度，根据需要调整
 
 class MyMainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
@@ -197,7 +211,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
             }
         """) 
         
-        self.set_images(three_pic)
+        self.set_images(two_pic)
 
         # 初始化第三排组件
         self.label_bottom.setStyleSheet("background-color: lightblue;text-align: center; border-radius:10px;")
@@ -289,17 +303,6 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
             return None
 
     def get_exif_info(self, path):
-        # 定义 EXIF 标签的中文映射
-        exif_tags_cn = {
-            'DateTime': '时间',
-            'Model': '机型',
-            'ExposureTime': '曝光时间',
-            'FNumber': '光圈',
-            'ISOSpeedRatings': 'ISO'
-        }
-        
-        if not os.path.exists(path):
-            return f"图片路径无效: {path}"
         try:
             image = Image.open(path)
             exif_data = image._getexif()
@@ -307,6 +310,13 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                 exif = {
                     Image.ExifTags.TAGS.get(tag, tag): value
                     for tag, value in exif_data.items()
+                }
+                exif_tags_cn = {
+                    "ExposureTime": "曝光时间",
+                    "FNumber": "光圈值",
+                    "ISOSpeedRatings": "ISO值",
+                    "DateTimeOriginal": "原始时间",
+                    # 添加更多EXIF标签的中文翻译
                 }
                 exif_info_list = []
                 for k, v in exif.items():
