@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import io
 
 one_pic = ["C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg"]
-two_pic = ["C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/1st_IMG_20241210_102946.jpg", "C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/001_test_A_10_Lux_.jpg"]
+two_pic = ["C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/1st_IMG_20241210_102946.jpg", "C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/4th_IMG_20241210_035634.jpg"]
 three_pic = ["C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/1st_IMG_20241210_102946.jpg", "C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/001_test_A_10_Lux_.jpg", "C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/002_test_A_10_Lux_.jpg"]
 class ImageTransform:
     """图片旋转exif信息调整类"""
@@ -273,14 +273,13 @@ class SubMainWindow(QMainWindow, Ui_MainWindow):
         self.label_bottom.setStyleSheet("background-color: lightblue;text-align: center; border-radius:10px;")
         self.label_bottom.setText(" 这是一个AI看图信息提示栏 ")  # 根据需要设置标签的文本
         self.label_bottom.setFont(custom_font)  # 应用自定义字体
-
     def set_images(self, image_paths):
         self.images.clear()
-        self.graphics_views.clear()    # 清理之前的视图列表
-        self.pixmap_items.clear()      # 清空之前的图片项
-        self.exif_texts.clear()        # 清空之前的 EXIF 信息
-        self.histograms.clear()        # 清空之前的直方图信息
-        self.original_pixmaps.clear()  # 清空原始图片缓存
+        self.graphics_views.clear()
+        self.pixmap_items.clear()
+        self.exif_texts.clear()
+        self.histograms.clear()
+        self.original_pixmaps.clear()
         self.tableWidget_medium.clearContents()
         self.tableWidget_medium.setColumnCount(len(image_paths))
         self.tableWidget_medium.setRowCount(1)
@@ -288,16 +287,17 @@ class SubMainWindow(QMainWindow, Ui_MainWindow):
         folder_names = [os.path.basename(os.path.dirname(path)) for path in image_paths]
         self.tableWidget_medium.setHorizontalHeaderLabels(folder_names)
 
+        base_width, base_height = self.get_base_size(image_paths)
+
         for index, path in enumerate(image_paths):
             if not os.path.exists(path):
                 print(f"图片路径无效: {path}")
-                self.images.append(path)  # 确保即使路径无效也记录下来
+                self.images.append(path)
                 self.exif_texts.append(None)
                 self.histograms.append(None)
                 self.original_pixmaps.append(None)
                 continue
 
-            # pixmap = QPixmap(path)
             pixmap = ImageTransform.auto_rotate_image(path)
 
             if pixmap.isNull():
@@ -308,46 +308,58 @@ class SubMainWindow(QMainWindow, Ui_MainWindow):
                 self.original_pixmaps.append(None)
                 continue
 
-            self.images.append(path)  # 添加有效的图片路径到 self.images
+            # 计算缩放倍率
+            pixmap_width = pixmap.width()
+            pixmap_height = pixmap.height()
+            scale_factor = min(base_width / pixmap_width, base_height / pixmap_height)
+            new_width = int(pixmap_width * scale_factor)
+            new_height = int(pixmap_height * scale_factor)
+            scaled_pixmap = pixmap.scaled(new_width, new_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
+            self.images.append(path)
             scene = QGraphicsScene(self)
-            pixmap_item = QGraphicsPixmapItem(pixmap)
-            # 设置变换原点为图片中心
-            pixmap_item.setTransformOriginPoint(pixmap.rect().center())
+            pixmap_item = QGraphicsPixmapItem(scaled_pixmap)
+            pixmap_item.setTransformOriginPoint(scaled_pixmap.rect().center())
             scene.addItem(pixmap_item)
 
             view = MyGraphicsView(scene, self.get_exif_info(path), self)
-            view.pixmap_items.append(pixmap_item)  # 添加 pixmap_item 到 pixmap_items
+            view.pixmap_items.append(pixmap_item)
             self.graphics_views.append(view)
 
-            # 获取 EXIF 信息
             exif_info = self.get_exif_info(path)
             if not exif_info:
                 exif_info = "无EXIF信息"
             self.exif_texts.append(exif_info)
 
-            # 计算亮度直方图
             histogram = self.calculate_brightness_histogram(path)
             self.histograms.append(histogram)
 
-            # 设置初始缩放比例
-            initial_scale = 0.5  # 例如，缩小到50%
+            initial_scale = 1.0  # 已经根据基准尺寸缩放，无需进一步缩放
             view.scale(initial_scale, initial_scale)
-            
-            # 根据复选框状态设置 EXIF 信息和直方图的可见性
+
             view.set_exif_visibility(self.checkBox_1.isChecked())
             view.set_histogram_visibility(self.checkBox_2.isChecked())
 
-            # 设置直方图数据
             if self.histograms[index]:
                 view.set_histogram_data(self.histograms[index])
             else:
                 view.set_histogram_data(None)
 
             self.tableWidget_medium.setCellWidget(0, index, view)
+            self.original_pixmaps.append(scaled_pixmap)
 
-            # 缓存原始图片的 QPixmap 对象
-            self.original_pixmaps.append(pixmap)
+    def get_base_size(self, image_paths):
+        """
+        获取基准尺寸，选择第一张图片的尺寸作为基准。
+        如果第一张图片无效，则选择下一张有效图片。
+        """
+        for path in image_paths:
+            if os.path.exists(path):
+                pixmap = ImageTransform.auto_rotate_image(path)
+                if not pixmap.isNull():
+                    return pixmap.width(), pixmap.height()
+        # 如果所有图片都无效，设定默认尺寸
+        return 800, 600
 
     def toggle_exif_info(self, state):
         print(f"切换 EXIF 信息: {'显示' if state == Qt.Checked else '隐藏'}")
@@ -498,6 +510,7 @@ class SubMainWindow(QMainWindow, Ui_MainWindow):
             for view in self.graphics_views:
                 self.zoom_view(view, zoom_factor)
 
+
     def zoom_view(self, view, zoom_factor):
         current_scale = view.transform().m11()
         min_scale = 0.1
@@ -519,20 +532,21 @@ class SubMainWindow(QMainWindow, Ui_MainWindow):
         self.rotate_image(90)
 
     def rotate_image(self, angle):
-        # 获取鼠标的全局位置
         cursor_pos = QCursor.pos()
-        # 将全局位置转换为窗口内的位置
         pos = self.mapFromGlobal(cursor_pos)
-        
+
         for view in self.graphics_views:
-            # 使用 mapFromParent 将全局坐标转换为 view 的本地坐标
             local_pos = view.mapFromParent(pos)
             if view.rect().contains(local_pos):
                 items = view.items(local_pos)
                 if items:
                     pixmap_item = items[0]
-                    # 设置旋转围绕中心
+                    # 获取当前缩放比例
+                    current_scale = view.transform().m11()
+                    # 旋转
                     pixmap_item.setRotation(pixmap_item.rotation() + angle)
+                    # 保持缩放比例
+                    pixmap_item.setScale(current_scale)
                 break
 
     def keyPressEvent(self, event):
