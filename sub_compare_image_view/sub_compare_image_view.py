@@ -316,8 +316,22 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         except Exception as e:
             print(f"计算直方图失败: {path}\n错误: {e}")
             return None
-
+    def pic_size(self, path):
+            # 获取图片尺寸
+        image = Image.open(path)
+        width, height = image.size
+        file_size = os.path.getsize(path)  # 文件大小（字节）
+        if file_size < 1024:
+            size_str = f"{file_size} B"
+        elif file_size < 1024 ** 2:
+            size_str = f"{file_size / 1024:.2f} KB"
+        else:
+            size_str = f"{file_size / (1024 ** 2):.2f} MB"
+        exif_size_info = f"图片大小: {size_str}\n图片尺寸: {width} x {height}"
+        return exif_size_info
+    
     def get_exif_info(self, path):
+        exif_size_info = self.pic_size(path)
         try:
             image = Image.open(path)
             exif_data = image._getexif()
@@ -327,11 +341,28 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                     for tag, value in exif_data.items()
                 }
                 exif_tags_cn = {
+                    "Make": "品牌",
+                    "Model": "型号",
+                    "DeviceModel": "设备型号",
                     "ExposureTime": "曝光时间",
                     "FNumber": "光圈值",
                     "ISOSpeedRatings": "ISO值",
                     "DateTimeOriginal": "原始时间",
+                    "ExposureBiasValue": "曝光补偿",
+                    "MeteringMode": "测光模式",
+                    # "Flash": "闪光灯",
                     # 添加更多EXIF标签的中文翻译
+                }
+                # 增加测光模式的映射
+                metering_mode_mapping = {
+                    0: "未知",
+                    1: "平均测光",
+                    2: "中央重点测光",
+                    3: "点测光",
+                    4: "多点测光",
+                    5: "多区域测光",
+                    6: "部分测光",
+                    255: "其他"
                 }
                 exif_info_list = []
                 for k, v in exif.items():
@@ -364,9 +395,14 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                                 except Exception:
                                     exposure_time = v
                             exif_info_list.append(f"{k_cn}: {exposure_time}")
+                        elif k == "MeteringMode":
+                            # 将测光模式的数值转换为对应的中文描述
+                            metering_mode = metering_mode_mapping.get(v, "其他")
+                            exif_info_list.append(f"{k_cn}: {metering_mode}")
                         else:
                             exif_info_list.append(f"{k_cn}: {v}")
                 exif_info = "\n".join(exif_info_list)
+                exif_info =  exif_info + "\n" + exif_size_info
             else:
                 exif_info = "无EXIF信息"
             return exif_info
