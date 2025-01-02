@@ -1,21 +1,22 @@
 from ui.sub_ui import Ui_MainWindow
 import sys, os
+from PyQt5 import QtWidgets, QtGui
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTableWidgetItem, QLabel, QHeaderView, QWidget,
     QShortcut, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QVBoxLayout,
     QMessageBox
 )
 from PyQt5.QtGui import QIcon, QImage, QPixmap, QKeySequence, QFontDatabase, QFont, QPainter, QCursor
-from PyQt5.QtCore import Qt, QEvent, QSize, QPoint
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QPoint, QSize
 from PIL import Image
 from fractions import Fraction
 
 import matplotlib.pyplot as plt
 import io
 
-one_pic = ['C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg']
-two_pic = ['C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg', 'C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/001_test_A_10_Lux_.jpg']
-three_pic = ['C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/000_test_A_10_Lux_.jpg', 'C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/001_test_A_10_Lux_.jpg', 'C:/Users/chenyang3/Desktop/rename/sub_compare_image_view/test/002_test_A_10_Lux_.jpg']
+one_pic = ['D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081113.jpg']
+two_pic = ['D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081126.jpg', 'D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081300.jpg']
+three_pic = ['D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081113.jpg', 'D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081124.jpg', 'D:/Tuning/M5151/0_picture/20241209_FT/1209-C3N后置GL四供第三轮FT（小米园区）/photo\\四供\\四供_IMG_20241209_081126.jpg']
 
 class MyGraphicsView(QGraphicsView):
     def __init__(self, scene, exif_text=None, *args, **kwargs):
@@ -118,15 +119,19 @@ class MyGraphicsView(QGraphicsView):
         # 可选：根据视图大小调整 histogram_label 的大小
         # self.histogram_label.setFixedWidth(self.width() - 10)  # 保持左右留边
         # self.histogram_label.setFixedHeight(100)  # 固定高度，根据需要调整
-
-class MyMainWindow(QMainWindow, Ui_MainWindow):
-    def __init__(self, parent=None):
-        super(MyMainWindow, self).__init__(parent)
+class SubMainWindow(QMainWindow, Ui_MainWindow):
+    closed = pyqtSignal()
+    def __init__(self, images_path_list, parent=None):
+        super(SubMainWindow, self).__init__(parent)
         self.setupUi(self)
 
+        self.images_path_list = images_path_list     # 初始化图片列表
+
         self.images = []            # 初始化图片列表
-        self.graphics_views = []    # 确保在这里初始化
-        self.pixmap_items = []      # 存储每个图片项
+        self.graphics_views = []  # 确保在这里初始化
+        
+        
+        self.pixmap_items = []    # 新增：存储每个图片项
         self.exif_texts = []        # 存储每个视图的 EXIF 信息
         self.histograms = []        # 存储每个视图的直方图
 
@@ -151,12 +156,11 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         self.checkBox_2.stateChanged.connect(self.toggle_histogram_info)  # 新增
 
     def init_ui(self):
+        
         # 设置主界面图标以及标题
-        # icon_path = os.path.join(os.path.dirname(__file__), "images", "viewer.ico")
-        # self.setWindowIcon(QIcon(icon_path))
+        icon_path = os.path.join(os.path.dirname(__file__), "images", "viewer.ico")
+        self.setWindowIcon(QIcon(icon_path))
         self.setWindowTitle("HiViewer_V1.0")
-        # 设置窗口为全屏模式
-        # self.showFullScreen()
 
         # 导入字体，设置显示的字体样式
         font_path = os.path.join(os.path.dirname(__file__), "fonts", "霞鹜文楷.ttf")  # 字体文件路径
@@ -186,6 +190,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         self.label_0.setText(" 提示: 鼠标左键拖动图像, 滚轮控制放大/缩小; 按住Ctrl或者鼠标右键操作单独图像 ")  # 根据需要设置标签的文本
         self.label_0.setFont(custom_font)  # 应用自定义字体
 
+
         self.checkBox_1.setText("Exif信息")
         self.checkBox_1.setFont(custom_font)  
         self.checkBox_2.setText("直方图信息")
@@ -214,8 +219,8 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                 background-color: rgb(127, 127, 127);  /* 或者设置为其他颜色，例如 white */
             }
         """) 
-        
-        self.set_images(two_pic)
+        # 设置传入的图片路径列表
+        self.set_images(self.images_path_list)
 
         # 初始化第三排组件
         self.label_bottom.setStyleSheet("background-color: lightblue;text-align: center; border-radius:10px;")
@@ -454,6 +459,9 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
             view.scale(zoom_factor, zoom_factor)
             view.centerOn(center)
 
+    def closeEvent(self, event):
+        self.closed.emit()  # 发射关闭信号
+        event.accept()
     def rotate_left(self):
         self.rotate_image(-90)
 
@@ -486,7 +494,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         elif event.key() == Qt.Key_W:
             self.handle_overlay('w')
         else:
-            super(MyMainWindow, self).keyPressEvent(event)
+            super(SubMainWindow, self).keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
         if event.isAutoRepeat():
@@ -497,7 +505,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         elif event.key() == Qt.Key_W:
             self.restore_images('w')
         else:
-            super(MyMainWindow, self).keyReleaseEvent(event)
+            super(SubMainWindow, self).keyReleaseEvent(event)
 
     def handle_overlay(self, key):
         print(f"handle_overlay called with key: {key}, number of images: {len(self.images)}")
@@ -555,6 +563,6 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = MyMainWindow()
+    window = SubMainWindow(two_pic)
     window.show()
     sys.exit(app.exec_())
