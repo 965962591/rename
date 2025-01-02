@@ -2,7 +2,8 @@ from ui.sub_ui import Ui_MainWindow
 import sys, os
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTableWidgetItem, QLabel, QHeaderView, QWidget,
-    QShortcut, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QVBoxLayout
+    QShortcut, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QVBoxLayout,
+    QMessageBox
 )
 from PyQt5.QtGui import QIcon, QImage, QPixmap, QKeySequence, QFontDatabase, QFont, QPainter, QCursor
 from PyQt5.QtCore import Qt, QEvent, QSize, QPoint
@@ -33,6 +34,9 @@ class MyGraphicsView(QGraphicsView):
         self.histogram = None  # 存储直方图数据
         self.show_histogram = False  # 控制直方图显示
 
+        self.pixmap_items = []  # 初始化 pixmap_items 列表
+        print("Initialized MyGraphicsView with empty pixmap_items")
+
         # 添加 QLabel 显示 EXIF 信息
         self.exif_label = QLabel(self)
         self.exif_label.setText(self.exif_text if self.exif_text else "")
@@ -46,12 +50,10 @@ class MyGraphicsView(QGraphicsView):
         # 添加 QLabel 显示直方图
         self.histogram_label = QLabel(self)
         self.histogram_label.setStyleSheet("border: 1px solid black;")
+        self.histogram_label.move(5, 5 + self.exif_label.height() + 5)  # 位置在 exif_label 下方
         self.histogram_label.setVisible(self.show_histogram)
-        self.histogram_label.setAttribute(Qt.WA_TransparentForMouseEvents)
-
-        # 设置直方图的固定大小
-        self.histogram_label.setFixedWidth(150)  # 根据需要调整宽度
-        self.histogram_label.setFixedHeight(100)  # 根据需要调整高度
+        self.histogram_label.setFixedSize(150, 100)  # 根据需要调整大小
+        self.histogram_label.setAttribute(Qt.WA_TransparentForMouseEvents)  # 不拦截鼠标事件
 
     def set_histogram_data(self, histogram):
         if histogram is None:
@@ -127,6 +129,8 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         self.pixmap_items = []      # 存储每个图片项
         self.exif_texts = []        # 存储每个视图的 EXIF 信息
         self.histograms = []        # 存储每个视图的直方图
+
+        self.original_pixmaps = []  # 缓存原始图片的 QPixmap 对象
 
         self.init_ui()              # 调用初始化界面组件的方法
         self.showMaximized()        # 设置窗口为最大化模式
@@ -224,6 +228,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         self.pixmap_items.clear()      # 清空之前的图片项
         self.exif_texts.clear()        # 清空之前的 EXIF 信息
         self.histograms.clear()        # 清空之前的直方图信息
+        self.original_pixmaps.clear()  # 清空原始图片缓存
         self.tableWidget_medium.clearContents()
         self.tableWidget_medium.setColumnCount(len(image_paths))
         self.tableWidget_medium.setRowCount(1)
@@ -234,22 +239,31 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         for index, path in enumerate(image_paths):
             if not os.path.exists(path):
                 print(f"图片路径无效: {path}")
+                self.images.append(path)  # 确保即使路径无效也记录下来
                 self.exif_texts.append(None)
                 self.histograms.append(None)
+                self.original_pixmaps.append(None)
                 continue
             pixmap = QPixmap(path)
             if pixmap.isNull():
                 print(f"图片加载失败: {path}")
+                self.images.append(path)
                 self.exif_texts.append(None)
                 self.histograms.append(None)
+                self.original_pixmaps.append(None)
                 continue
+
+            self.images.append(path)  # 添加有效的图片路径到 self.images
 
             scene = QGraphicsScene(self)
             pixmap_item = QGraphicsPixmapItem(pixmap)
             # 设置变换原点为图片中心
             pixmap_item.setTransformOriginPoint(pixmap.rect().center())
             scene.addItem(pixmap_item)
-            self.pixmap_items.append(pixmap_item)  # 存储图片项
+
+            view = MyGraphicsView(scene, self.get_exif_info(path), self)
+            view.pixmap_items.append(pixmap_item)  # 添加 pixmap_item 到 pixmap_items
+            self.graphics_views.append(view)
 
             # 获取 EXIF 信息
             exif_info = self.get_exif_info(path)
@@ -261,7 +275,6 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
             histogram = self.calculate_brightness_histogram(path)
             self.histograms.append(histogram)
 
-            view = MyGraphicsView(scene, exif_info, self)
             # 设置初始缩放比例
             initial_scale = 0.5  # 例如，缩小到50%
             view.scale(initial_scale, initial_scale)
@@ -277,7 +290,9 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                 view.set_histogram_data(None)
 
             self.tableWidget_medium.setCellWidget(0, index, view)
-            self.graphics_views.append(view)
+
+            # 缓存原始图片的 QPixmap 对象
+            self.original_pixmaps.append(pixmap)
 
     def toggle_exif_info(self, state):
         print(f"切换 EXIF 信息: {'显示' if state == Qt.Checked else '隐藏'}")
@@ -425,6 +440,82 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                     # 设置旋转围绕中心
                     pixmap_item.setRotation(pixmap_item.rotation() + angle)
                 break
+
+    def keyPressEvent(self, event):
+        if event.isAutoRepeat():
+            return  # 忽略自动重复事件
+
+        if event.key() == Qt.Key_Q:
+            self.handle_overlay('q')
+        elif event.key() == Qt.Key_W:
+            self.handle_overlay('w')
+        else:
+            super(MyMainWindow, self).keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.isAutoRepeat():
+            return  # 忽略自动重复事件
+
+        if event.key() == Qt.Key_Q:
+            self.restore_images('q')
+        elif event.key() == Qt.Key_W:
+            self.restore_images('w')
+        else:
+            super(MyMainWindow, self).keyReleaseEvent(event)
+
+    def handle_overlay(self, key):
+        print(f"handle_overlay called with key: {key}, number of images: {len(self.images)}")
+        if len(self.images) != 2:
+            QMessageBox.warning(self, "警告", "只有两张图片时才能使用覆盖比较功能。")
+            return
+
+        if key == 'q':
+            # 将右侧图片覆盖到左侧
+            right_pixmap = self.original_pixmaps[1]
+            if right_pixmap:
+                print("覆盖右侧图片到左侧")
+                try:
+                    self.graphics_views[0].pixmap_items[0].setPixmap(right_pixmap)
+                except AttributeError as e:
+                    print(f"Error during overlay with key 'q': {e}")
+        elif key == 'w':
+            # 将左侧图片覆盖到右侧
+            left_pixmap = self.original_pixmaps[0]
+            if left_pixmap:
+                print("覆盖左侧图片到右侧")
+                try:
+                    self.graphics_views[1].pixmap_items[0].setPixmap(left_pixmap)
+                except AttributeError as e:
+                    print(f"Error during overlay with key 'w': {e}")
+
+    def restore_images(self, key):
+        if len(self.images) != 2:
+            return  # 无需恢复
+
+        if key == 'q':
+            # 恢复左侧图片
+            original_left_pixmap = self.original_pixmaps[0]
+            if original_left_pixmap:
+                if self.graphics_views[0].pixmap_items:
+                    print("恢复左侧图片")
+                    try:
+                        self.graphics_views[0].pixmap_items[0].setPixmap(original_left_pixmap)
+                    except AttributeError as e:
+                        print(f"Error during restoring with key 'q': {e}")
+                else:
+                    print("Error: graphics_views[0].pixmap_items is empty")
+        elif key == 'w':
+            # 恢复右侧图片
+            original_right_pixmap = self.original_pixmaps[1]
+            if original_right_pixmap:
+                if self.graphics_views[1].pixmap_items:
+                    print("恢复右侧图片")
+                    try:
+                        self.graphics_views[1].pixmap_items[0].setPixmap(original_right_pixmap)
+                    except AttributeError as e:
+                        print(f"Error during restoring with key 'w': {e}")
+                else:
+                    print("Error: graphics_views[1].pixmap_items is empty")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
